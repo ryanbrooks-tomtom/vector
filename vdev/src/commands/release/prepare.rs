@@ -81,14 +81,7 @@ impl Prepare {
         self.update_vector_version(&self.repo_root.join(KUBECLT_CUE_FILE))?;
         self.update_vector_version(&self.repo_root.join(INSTALL_SCRIPT))?;
 
-        if !self.dry_run {
-            git::add_files_in_current_dir()?;
-            git::commit(&format!(
-                "chore(releasing): Prepare version {}",
-                self.new_vector_version
-            ))?;
-            self.open_release_pr()?;
-        }
+        self.publish_release_preparation()?;
 
         Ok(())
     }
@@ -190,6 +183,19 @@ impl Prepare {
             .map_err(|e| anyhow!("Failed to write {}: {}", file_path.display(), e))?;
 
         Ok(())
+    }
+
+    fn publish_release_preparation(&self) -> Result<()> {
+        if self.dry_run {
+            return Ok(());
+        }
+
+        git::add_files_in_current_dir()?;
+        git::commit(&format!(
+            "chore(releasing): Prepare version {}",
+            self.new_vector_version
+        ))?;
+        self.open_release_pr()
     }
 
     /// Final step. Create a release prep PR against the release branch.
