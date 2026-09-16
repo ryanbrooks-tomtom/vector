@@ -34,7 +34,7 @@ use crate::{
 // of escaped double-quotes -- but we believe this should be very rare in
 // practice.
 pub const MAX_PAYLOAD_BYTES: usize = 5_000_000;
-pub const BATCH_GOAL_BYTES: usize = 4_250_000;
+pub const BATCH_HEADROOM_BYTES: usize = 750_000;
 pub const BATCH_MAX_EVENTS: usize = 1_000;
 pub const BATCH_DEFAULT_TIMEOUT_SECS: f64 = 5.0;
 
@@ -43,7 +43,7 @@ pub struct DatadogLogsDefaultBatchSettings;
 
 impl SinkBatchSettings for DatadogLogsDefaultBatchSettings {
     const MAX_EVENTS: Option<usize> = Some(BATCH_MAX_EVENTS);
-    const MAX_BYTES: Option<usize> = Some(BATCH_GOAL_BYTES);
+    const MAX_BYTES: Option<usize> = Some(MAX_PAYLOAD_BYTES - BATCH_HEADROOM_BYTES);
     const TIMEOUT_SECS: f64 = BATCH_DEFAULT_TIMEOUT_SECS;
 }
 
@@ -75,6 +75,14 @@ pub struct DatadogLogsConfig {
     /// configuration setting.
     #[serde(default)]
     pub conforms_as_agent: bool,
+
+    /// Maximum uncompressed payload size in bytes sent to the endpoint. Must be at least
+    /// 5,000,000 (5 MB, the standard Datadog API limit). Increase this when targeting a
+    /// compatible endpoint that accepts larger payloads. The batch goal is derived as
+    /// `max_payload_bytes - 750,000` bytes; events larger than the batch goal are sent
+    /// alone in their batch.
+    #[serde(default)]
+    pub max_payload_bytes: Option<usize>,
 }
 
 const fn default_compression() -> Option<Compression> {
@@ -157,6 +165,7 @@ impl DatadogLogsConfig {
             batch,
             protocol,
             conforms_as_agent,
+            self.max_payload_bytes.unwrap_or(MAX_PAYLOAD_BYTES),
         )
         .compression(self.compression.or_else(default_compression).unwrap())
         .build();
@@ -228,10 +237,21 @@ impl ValidatedSink for DatadogLogsConfig {
         };
         validate_headers(&request_headers)?;
 
+        if let Some(max_payload_bytes) = self.max_payload_bytes
+            && max_payload_bytes < MAX_PAYLOAD_BYTES
+        {
+            return Err(format!(
+                "max_payload_bytes ({max_payload_bytes}) must be at least the default limit ({MAX_PAYLOAD_BYTES})"
+            )
+            .into());
+        }
+
+        let batch_goal_bytes =
+            self.max_payload_bytes.unwrap_or(MAX_PAYLOAD_BYTES) - BATCH_HEADROOM_BYTES;
         let batch = self
             .batch
             .validate()?
-            .limit_max_bytes(BATCH_GOAL_BYTES)?
+            .limit_max_bytes(batch_goal_bytes)?
             .limit_max_events(BATCH_MAX_EVENTS)?
             .into_batcher_settings()?;
 
@@ -279,7 +299,10 @@ mod test {
     fn validate_produces_usable_batch_settings() {
         let config = DatadogLogsConfig::default();
         let validated = config.validate().expect("validation should succeed");
-        assert_eq!(validated.batch.size_limit, BATCH_GOAL_BYTES);
+        assert_eq!(
+            validated.batch.size_limit,
+            MAX_PAYLOAD_BYTES - BATCH_HEADROOM_BYTES
+        );
         assert_eq!(validated.batch.item_limit, BATCH_MAX_EVENTS);
     }
 
