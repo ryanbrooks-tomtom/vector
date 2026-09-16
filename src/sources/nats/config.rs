@@ -13,9 +13,11 @@ use vrl::value::Kind;
 
 use crate::{
     codecs::DecodingConfig,
-    config::{GenerateConfig, SourceConfig, SourceContext, SourceOutput},
+    config::{
+        GenerateConfig, SourceAcknowledgementsConfig, SourceConfig, SourceContext, SourceOutput,
+    },
     nats::{NatsAuthConfig, NatsConfigError, from_tls_auth_config},
-    serde::{default_decoding, default_framing_message_based},
+    serde::{bool_or_struct, default_decoding, default_framing_message_based},
     sources::{
         Source,
         nats::source::{create_subscription, run_nats_core, run_nats_jetstream},
@@ -171,6 +173,10 @@ pub struct NatsSourceConfig {
     #[configurable(derived)]
     #[serde(default)]
     pub jetstream: Option<JetStreamConfig>,
+
+    #[configurable(derived)]
+    #[serde(default, deserialize_with = "bool_or_struct")]
+    pub acknowledgements: SourceAcknowledgementsConfig,
 }
 
 pub fn default_subject_key_field() -> OptionalValuePath {
@@ -198,6 +204,7 @@ impl GenerateConfig for NatsSourceConfig {
 impl SourceConfig for NatsSourceConfig {
     async fn build(&self, cx: SourceContext) -> crate::Result<Source> {
         let log_namespace = cx.log_namespace(self.log_namespace);
+        let acknowledgements = cx.do_acknowledgements(self.acknowledgements);
         let decoder =
             DecodingConfig::new(self.framing.clone(), self.decoding.clone(), log_namespace)
                 .build()?;
@@ -233,6 +240,7 @@ impl SourceConfig for NatsSourceConfig {
                     log_namespace,
                     cx.shutdown,
                     cx.out,
+                    acknowledgements,
                 )))
             }
             NatsMode::Core => {
