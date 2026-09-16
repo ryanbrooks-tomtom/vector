@@ -174,7 +174,6 @@ pub struct NatsSourceConfig {
     #[serde(default)]
     pub jetstream: Option<JetStreamConfig>,
 
-    #[configurable(derived)]
     #[serde(default, deserialize_with = "bool_or_struct")]
     pub acknowledgements: SourceAcknowledgementsConfig,
 }
