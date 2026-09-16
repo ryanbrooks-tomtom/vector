@@ -84,6 +84,27 @@ fn check(repo: &Path, base: &str, success: bool) -> String {
     stderr
 }
 
+fn prepare_check(repo: &Path, success: bool) -> String {
+    let output = Command::new(env!("CARGO_BIN_EXE_vdev"))
+        .args([
+            "release",
+            "workflow",
+            "prepare-check",
+            "--version",
+            "0.59.0",
+            "--bot-app",
+            "release-bot",
+            "--repository",
+            "vectordotdev/vector",
+        ])
+        .current_dir(repo)
+        .output()
+        .unwrap();
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert_eq!(output.status.success(), success, "{stderr}");
+    stderr
+}
+
 #[test]
 fn release_preparation_requires_its_frozen_base() {
     let (temp, base) = preparation();
@@ -110,6 +131,44 @@ fn release_preparation_rejects_source_changes() {
 
     let error = check(repo, &base, false);
     assert!(error.contains("unexpected release preparation file: src/lib.rs"));
+}
+
+#[test]
+fn release_preparation_rejects_source_files_renamed_into_allowed_paths() {
+    let (temp, base) = preparation();
+    let repo = temp.path();
+    fs::create_dir_all(repo.join("docs/generated")).unwrap();
+    git(repo, &["mv", "src/lib.rs", "docs/generated/lib.rs"]);
+    git(repo, &["commit", "--amend", "--no-edit"]);
+
+    let error = check(repo, &base, false);
+    assert!(error.contains("unexpected release preparation file: src/lib.rs"));
+}
+
+#[test]
+fn release_preparation_rejects_a_remote_only_release_tag() {
+    let temp = tempdir().unwrap();
+    let repo = temp.path();
+    git(repo, &["init", "-b", "master"]);
+    git(repo, &["config", "core.hooksPath", "/dev/null"]);
+    git(repo, &["config", "commit.gpgsign", "false"]);
+    git(repo, &["config", "user.name", "Release test"]);
+    git(repo, &["config", "user.email", "release@example.invalid"]);
+    version(repo, "0.59.0-dev");
+    commit(repo);
+
+    let remote = tempdir().unwrap();
+    git(remote.path(), &["init", "--bare"]);
+    git(
+        repo,
+        &["remote", "add", "origin", remote.path().to_str().unwrap()],
+    );
+    git(repo, &["tag", "v0.59.0"]);
+    git(repo, &["push", "origin", "refs/tags/v0.59.0"]);
+    git(repo, &["tag", "--delete", "v0.59.0"]);
+
+    let error = prepare_check(repo, false);
+    assert!(error.contains("tag v0.59.0 already exists"));
 }
 
 #[test]

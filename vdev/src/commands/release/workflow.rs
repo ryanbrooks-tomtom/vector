@@ -81,7 +81,7 @@ impl PrepareCheck {
 
         let tag = format!("v{}", self.version);
         ensure!(
-            resolve_ref(&format!("refs/tags/{tag}^{{commit}}"))?.is_none(),
+            !remote_ref_exists(&format!("refs/tags/{tag}"))?,
             "tag {tag} already exists"
         );
 
@@ -92,7 +92,7 @@ impl PrepareCheck {
             append_step_summary(&format!("Existing preparation PR: {url}"))?;
         } else {
             ensure!(
-                !remote_branch_exists(&branch)?,
+                !remote_ref_exists(&format!("refs/heads/{branch}"))?,
                 "branch {branch} exists without an open PR"
             );
             set_output("skip", "false")?;
@@ -206,7 +206,7 @@ fn prefixed_file(file: &str, prefix: &str, suffix: &str) -> bool {
 
 fn changed_files(before: &str, after: &str) -> Result<Vec<String>> {
     Ok(
-        git::run_and_check_output(&["diff", "--name-only", before, after])?
+        git::run_and_check_output(&["diff", "--name-only", "--no-renames", before, after])?
             .lines()
             .map(str::to_owned)
             .collect(),
@@ -224,28 +224,9 @@ fn validate_single_commit(base: &str) -> Result<()> {
     Ok(())
 }
 
-fn resolve_ref(reference: &str) -> Result<Option<String>> {
-    let output = Command::new("git")
-        .args(["rev-parse", "--verify", "--quiet", reference])
-        .output()
-        .context("failed to inspect git reference")?;
-    if output.status.success() {
-        Ok(Some(
-            String::from_utf8(output.stdout)
-                .context("git reference is not UTF-8")?
-                .trim()
-                .to_owned(),
-        ))
-    } else if output.status.code() == Some(1) {
-        Ok(None)
-    } else {
-        bail!("failed to inspect git reference {reference}")
-    }
-}
-
-fn remote_branch_exists(branch: &str) -> Result<bool> {
+fn remote_ref_exists(reference: &str) -> Result<bool> {
     let status = Command::new("git")
-        .args(["ls-remote", "--exit-code", "--heads", "origin", branch])
+        .args(["ls-remote", "--exit-code", "origin", reference])
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .status()
