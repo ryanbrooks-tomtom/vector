@@ -72,16 +72,7 @@ impl Cli {
 impl Prepare {
     pub fn run(&self) -> Result<()> {
         debug!("run");
-        if self.dry_run {
-            let head = git::run_and_check_output(&["rev-parse", "--abbrev-ref", "HEAD"])
-                .unwrap_or_else(|_| "<unknown>".to_string());
-            warn!(
-                "dry-run: generating changes on HEAD ({}) without switching branches",
-                head.trim()
-            );
-        } else {
-            self.create_release_branches()?;
-        }
+        self.create_release_branches()?;
         self.prepare_vector_version()?;
         self.pin_vrl_version()?;
 
@@ -105,6 +96,16 @@ impl Prepare {
     /// Steps 1 & 2
     fn create_release_branches(&self) -> Result<()> {
         debug!("create_release_branches");
+
+        if self.dry_run {
+            let head = git::run_and_check_output(&["rev-parse", "--abbrev-ref", "HEAD"])
+                .unwrap_or_else(|_| "<unknown>".to_string());
+            warn!(
+                "dry-run: generating changes on HEAD ({}) without switching branches",
+                head.trim()
+            );
+            return Ok(());
+        }
 
         // Step 1: Sync with remote and start from master.
         git::run_and_check_output(&["fetch"])?;
