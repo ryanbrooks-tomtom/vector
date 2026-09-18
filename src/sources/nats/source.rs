@@ -179,17 +179,24 @@ async fn drain_ack_tasks(tasks: &mut FuturesUnordered<tokio::task::JoinHandle<()
     }
 }
 
-pub async fn run_nats_jetstream(
+pub(crate) struct JetStreamAckConfig {
+    pub(crate) acknowledgements: bool,
+    pub(crate) ack_wait: Duration,
+}
+
+pub(crate) async fn run_nats_jetstream(
     config: NatsSourceConfig,
-    _connection: async_nats::Client,
     mut stream: PullConsumerStream,
-    ack_wait: Duration,
+    ack_config: JetStreamAckConfig,
     decoder: Decoder,
     log_namespace: LogNamespace,
     mut shutdown: ShutdownSignal,
     mut out: SourceSender,
-    acknowledgements: bool,
 ) -> Result<(), ()> {
+    let JetStreamAckConfig {
+        acknowledgements,
+        ack_wait,
+    } = ack_config;
     let events_received = register!(EventsReceived);
     let bytes_received = register!(BytesReceived::from(Protocol::TCP));
     let mut finalizers = FuturesUnordered::new();

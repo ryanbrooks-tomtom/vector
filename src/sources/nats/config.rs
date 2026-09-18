@@ -20,7 +20,10 @@ use crate::{
     serde::{bool_or_struct, default_decoding, default_framing_message_based},
     sources::{
         Source,
-        nats::source::{ack_deadline, create_subscription, run_nats_core, run_nats_jetstream},
+        nats::source::{
+            JetStreamAckConfig, ack_deadline, create_subscription, run_nats_core,
+            run_nats_jetstream,
+        },
     },
     tls::TlsEnableableConfig,
 };
@@ -246,14 +249,15 @@ impl SourceConfig for NatsSourceConfig {
 
                 Ok(Box::pin(run_nats_jetstream(
                     self.clone(),
-                    connection,
                     messages,
-                    ack_wait,
+                    JetStreamAckConfig {
+                        acknowledgements,
+                        ack_wait,
+                    },
                     decoder,
                     log_namespace,
                     cx.shutdown,
                     cx.out,
-                    acknowledgements,
                 )))
             }
             NatsMode::Core => {
