@@ -20,7 +20,9 @@ use crate::{
     serde::{bool_or_struct, default_decoding, default_framing_message_based},
     sources::{
         Source,
-        nats::source::{create_subscription, run_nats_core, run_nats_jetstream},
+        nats::source::{
+            ack_deadline, create_subscription, run_nats_core, run_nats_jetstream,
+        },
     },
     tls::TlsEnableableConfig,
 };
@@ -231,7 +233,8 @@ impl SourceConfig for NatsSourceConfig {
                     }
                     .into());
                 }
-                let ack_wait = consumer_config.ack_wait;
+                let ack_wait =
+                    ack_deadline(consumer_config.ack_wait, &consumer_config.backoff);
 
                 let batch_config = js_config.batch_config.clone();
 
