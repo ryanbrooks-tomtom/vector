@@ -84,3 +84,6 @@ agents/reports/
 
 # stray rlib build artifacts
 *.rlib
+
+# PGO profiles and build logs (PGO.md)
+/pgo/

@@ -5,12 +5,16 @@ passthrough = [
     "CARGO_PROFILE_RELEASE_LTO",
     "CARGO_PROFILE_RELEASE_OPT_LEVEL",
     "CARGO_PROFILE_RELEASE_CODEGEN_UNITS",
+    "CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_RUSTFLAGS",
     "RUST_BACKTRACE",
     "RUST_LOG",
     "VECTOR_BUILD_DESC",
     "JEMALLOC_SYS_WITH_LG_PAGE",
     "JEMALLOC_SYS_WITH_LG_HUGEPAGE",
 ]
+# Mounted at the same path in the container, so a `-Cprofile-use=` path also
+# resolves for cross's host-side `cargo metadata` call.
+volumes = ["VECTOR_PGO_DIR"]
 
 [target.x86_64-unknown-linux-gnu]
 image = "vector-cross-env:x86_64-unknown-linux-gnu"
